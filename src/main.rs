@@ -13,9 +13,10 @@ struct Model {
     egui: Egui,
     w:u32,
     h:u32,
+    last_frame_time: Instant,
 
     // FPS counter
-    last_instant: Instant,
+    fps_timer: Instant,
     frame_count: u32,
     fps: f32,
 
@@ -67,11 +68,13 @@ fn model(app: &App) -> Model {
 
     Model {
         _window,
+        last_frame_time: Instant::now(),
+        fps_timer: Instant::now(),
         color1,
         color2,
         points: vec![],
         rot:0.0,
-        speed:0.00,
+        speed:0.2,
         offset,
         count,
         turns,
@@ -85,7 +88,6 @@ fn model(app: &App) -> Model {
         h,
         width,
         egui,
-        last_instant: Instant::now(),
         frame_count: 0,
         fps: 0.0,
         needs_update:true,
@@ -107,23 +109,27 @@ fn raw_window_event(_app: &App, model: &mut Model, event: &nannou::winit::event:
 fn update(_app: &App, model: &mut Model, _update: Update) {
 
     let ctx = model.egui.begin_frame();
+    let now = Instant::now();
+    let delta_time = now.duration_since(model.last_frame_time).as_secs_f32();
+    model.last_frame_time = now;
+
+    model.rot+=model.speed * delta_time;
 
     // FPS Counter
     model.frame_count += 1;
-    let now = Instant::now();
-    let elapsed = now.duration_since(model.last_instant);
+    let elapsed = now.duration_since(model.fps_timer);
     if elapsed >= Duration::from_secs(1) {
         model.fps = model.frame_count as f32 / elapsed.as_secs_f32();
         model.frame_count = 0;
-        model.last_instant = now;
+        model.fps_timer = now;
         println!("FPS: {:.1}", model.fps);  // print once per second, very low overhead
     }
 
 
     // GUI Code
     egui::Window::new("Spiral Controls").show(&ctx, |ui| {
-        model.needs_update |= ui.add(egui::Slider::new(&mut model.turns, 1..=10).text("Turns")).changed();
-        ui.add(egui::Slider::new(&mut model.speed, -0.02..=0.02).text("Speed"));
+        model.needs_update |= ui.add(egui::Slider::new(&mut model.turns, 1..=15).text("Turns")).changed();
+        ui.add(egui::Slider::new(&mut model.speed, -5.0..=5.0).text("Speed"));
         ui.add(egui::Slider::new(&mut model.offset, 0.0..=1.0).text("Offset"));
         model.needs_update |= ui.add(egui::Slider::new(&mut model.warp, -0.5..=0.5).text("Warp")).changed();
         ui.add(egui::Slider::new(&mut model.count, 90..=1080).text("Resolution"));
@@ -143,7 +149,6 @@ fn update(_app: &App, model: &mut Model, _update: Update) {
 
 
     // rotate the spiral and clear points cache from the previous frame
-    model.rot+=model.speed;
     model.x.clear();
     model.y.clear();
 
