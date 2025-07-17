@@ -14,6 +14,7 @@ struct Model {
     w:u32,
     h:u32,
     last_frame_time: Instant,
+    state: AppState,
 
     // FPS counter
     fps_timer: Instant,
@@ -42,6 +43,10 @@ struct Model {
     x: Vec<f32>, // temporarily stores the x coordinates for the points before being combined
     y: Vec<f32>, // temporarily stores the y coordinates for the points before being combined
 }
+enum AppState {
+    MainMenu,
+    SpiralView,
+}
 
 fn model(app: &App) -> Model {
     let _window = app
@@ -61,13 +66,11 @@ fn model(app: &App) -> Model {
     let (w,h) = app.main_window().inner_size_pixels();
     let offset = ((((h as f32)/2.0)/((w as f32)/2.0)).atan())/(2.0*PI);
     let angle_max = ((2.0*PI*turns as f32*((w as f32/2.0).pow(2.0)+(h as f32/2.0).pow(2.0)).sqrt())/(1000.0*(1.0-(width/turns as f32)).pow(cur_coefficient))).pow(1.0/cur_coefficient);
-    println!("w={} h={}", w, h);
-    println!("angle_max={} offset={}",angle_max, offset);
-
     let rad_max = (1.0/(2.0*PI*turns as f32))*angle_max.pow(cur_coefficient);
 
     Model {
         _window,
+        state: AppState::MainMenu,
         last_frame_time: Instant::now(),
         fps_timer: Instant::now(),
         color1,
@@ -109,71 +112,103 @@ fn raw_window_event(_app: &App, model: &mut Model, event: &nannou::winit::event:
 fn update(_app: &App, model: &mut Model, _update: Update) {
 
     let ctx = model.egui.begin_frame();
-    let now = Instant::now();
-    let delta_time = now.duration_since(model.last_frame_time).as_secs_f32();
-    model.last_frame_time = now;
+    
+    match model.state {
+        AppState::MainMenu => {
+            
+            let styles = vec![
+                "Classic Spiral",
+                "Placeholder 1",
+                "Placeholder 2",
+                "Placeholder 3",
+                "Placeholder 4",
+            ];
+            
+            egui::CentralPanel::default().show(&ctx, |ui| {
+                ui.vertical_centered(|ui|{
+                    ui.heading("Select Spiral");
+                    ui.separator();
+                    ui.horizontal_wrapped(|ui|{
+                        for &label in &styles {
+                            let clicked = ui
+                                .add_sized([150.0,200.0], egui::Button::new(label))
+                                .clicked();
+                            if clicked {
+                                model.state = AppState::SpiralView
+                            }
+                        }
+                    });
+                    ui.separator();
+                })
+            });
+        }
+        
+        AppState::SpiralView => {
+        let now = Instant::now();
+        let delta_time = now.duration_since(model.last_frame_time).as_secs_f32();
+        model.last_frame_time = now;
 
-    model.rot+=model.speed * delta_time;
+        model.rot += model.speed * delta_time;
 
-    // FPS Counter
-    model.frame_count += 1;
-    let elapsed = now.duration_since(model.fps_timer);
-    if elapsed >= Duration::from_secs(1) {
+        // FPS Counter
+        model.frame_count += 1;
+        let elapsed = now.duration_since(model.fps_timer);
+        if elapsed >= Duration::from_secs(1) {
         model.fps = model.frame_count as f32 / elapsed.as_secs_f32();
         model.frame_count = 0;
         model.fps_timer = now;
-        println!("FPS: {:.1}", model.fps);  // print once per second, very low overhead
-    }
+        println !("FPS: {:.1}", model.fps);  // print once per second, very low overhead
+        }
 
 
-    // GUI Code
-    egui::Window::new("Spiral Controls").show(&ctx, |ui| {
-        model.needs_update |= ui.add(egui::Slider::new(&mut model.turns, 1..=15).text("Turns")).changed();
-        ui.add(egui::Slider::new(&mut model.speed, -5.0..=5.0).text("Speed"));
-        ui.add(egui::Slider::new(&mut model.offset, 0.0..=1.0).text("Offset"));
-        model.needs_update |= ui.add(egui::Slider::new(&mut model.warp, -0.5..=0.5).text("Warp")).changed();
-        ui.add(egui::Slider::new(&mut model.count, 90..=1080).text("Resolution"));
+        // GUI Code
+        egui::Window::new("Spiral Controls").show( & ctx, | ui | {
+        model.needs_update |= ui.add(egui::Slider::new( & mut model.turns, 1..=15).text("Turns")).changed();
+        ui.add(egui::Slider::new( & mut model.speed, - 5.0..=5.0).text("Speed"));
+        ui.add(egui::Slider::new( & mut model.offset, 0.0..=1.0).text("Offset"));
+        model.needs_update |= ui.add(egui::Slider::new( & mut model.warp, - 0.5..=0.5).text("Warp")).changed();
+        ui.add(egui::Slider::new( & mut model.count, 90..=1080).text("Resolution"));
         ui.label("Color 1");
-        ui.color_edit_button_srgb(&mut model.color1);
+        ui.color_edit_button_srgb( & mut model.color1);
         ui.label("Color 2");
-        ui.color_edit_button_srgb(&mut model.color2);
-    });
+        ui.color_edit_button_srgb( & mut model.color2);
+        });
 
-    if model.needs_update {
-        model.cur_coefficient=10.0.powf(model.warp);
-        model.angle_max = ((2.0*PI*model.turns as f32*((model.w as f32/2.0).pow(2.0)+(model.h as f32/2.0).pow(2.0)).sqrt())/(1000.0*(1.0-(model.width/model.turns as f32)).pow(model.cur_coefficient))).pow(1.0/model.cur_coefficient);
-        model.rad_max = (1.0/(2.0*PI* model.turns as f32))*model.angle_max.pow(model.cur_coefficient);
+        if model.needs_update {
+        model.cur_coefficient = 10.0.powf(model.warp);
+        model.angle_max = ((2.0 * PI * model.turns as f32 * ((model.w as f32/ 2.0).pow(2.0) + (model.h as f32 /2.0).pow(2.0)).sqrt()) / (1000.0 * (1.0 - (model.width / model.turns as f32)).pow(model.cur_coefficient))).pow(1.0 / model.cur_coefficient);
+        model.rad_max = (1.0 /(2.0 * PI * model.turns as f32)) * model.angle_max.pow(model.cur_coefficient);
 
-        model.needs_update= false;
-    }
-
-
-    // rotate the spiral and clear points cache from the previous frame
-    model.x.clear();
-    model.y.clear();
+        model.needs_update = false;
+        }
 
 
-    // outer spiral edge points
-    for i in  0..=model.count{
+        // rotate the spiral and clear points cache from the previous frame
+        model.x.clear();
+        model.y.clear();
+
+
+        // outer spiral edge points
+        for i in 0..=model.count {
         let cur = i as f32 / model.count as f32;
-        let cur_rot = 2.0*PI*(cur*model.turns as f32 +model.offset+model.rot);
+        let cur_rot = 2.0 *PI * (cur * model.turns as f32 + model.offset + model.rot);
         let cur_rad = model.rad_max * cur.pow(model.cur_coefficient);
-        model.x.push(cur_rad*cur_rot.cos());
-        model.y.push(cur_rad*cur_rot.sin());
-    }
-    // inner spiral edge (reversed) points
-    for i in (0..=(model.count as f32* (1.0-(model.width/model.turns as f32))) as i32).rev() {
+        model.x.push(cur_rad * cur_rot.cos());
+        model.y.push(cur_rad * cur_rot.sin());
+        }
+        // inner spiral edge (reversed) points
+        for i in (0..=(model.count as f32 * (1.0 - (model.width / model.turns as f32))) as i32).rev() {
         let cur = i as f32 / model.count as f32;
-        let cur_rot = 2.0*PI*(cur*(model.turns as f32) + model.offset+model.rot-model.width);
+        let cur_rot = 2.0 * PI * (cur * (model.turns as f32) + model.offset + model.rot - model.width);
         let cur_rad = model.rad_max * cur.pow(model.cur_coefficient);
-        model.x.push(cur_rad*cur_rot.cos());
-        model.y.push(cur_rad*cur_rot.sin());
-    }
-    // collecting points into one vector
-    model.points = model.x.iter()
+        model.x.push(cur_rad * cur_rot.cos());
+        model.y.push(cur_rad * cur_rot.sin());
+        }
+        // collecting points into one vector
+        model.points = model.x.iter()
         .zip(model.y.iter())
-        .map(|(&x, &y)| pt2(x * 1000.0, y * 1000.0))
-        .collect();
+        .map( | ( & x, & y) | pt2(x * 1000.0, y * 1000.0))
+        .collect();} }
 }
 
 fn view(app: &App, model: &Model, frame: Frame) {
