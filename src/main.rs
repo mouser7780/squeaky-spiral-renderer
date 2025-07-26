@@ -2,7 +2,7 @@ mod visuals;
 use nannou::prelude::*;
 use nannou_egui::{self, egui, Egui};
 use std::time::{Instant, Duration};
-use crate::visuals::{ClassicVisual, Visual};
+use crate::visuals::{ClassicVisual, ConcentricVisual, Visual};
 
 fn main() {
     nannou::app(model).update(update).run();
@@ -83,10 +83,13 @@ fn raw_window_event(_app: &App, model: &mut Model, event: &nannou::winit::event:
     
     //listen for f1 key for gui toggle
     if let nannou::winit::event::WindowEvent::KeyboardInput {input, ..} = event 
-        && input.state == nannou::winit::event::ElementState::Pressed
-        && input.virtual_keycode == Some(nannou::winit::event::VirtualKeyCode::F1)
-    {
-        model.show_gui=!model.show_gui;
+        && input.state == nannou::winit::event::ElementState::Pressed {
+        if input.virtual_keycode == Some(nannou::winit::event::VirtualKeyCode::F1) {
+            model.show_gui = !model.show_gui;
+        }
+        if input.virtual_keycode == Some(nannou::winit::event::VirtualKeyCode::F2) {
+            model.state = AppState::MainMenu;
+        }
     }
 
 }
@@ -98,10 +101,7 @@ fn update(_app: &App, model: &mut Model, _update: Update) {
         AppState::MainMenu => {
             let styles = vec![
                 "Classic Spiral",
-                "Placeholder 1",
-                "Placeholder 2",
-                "Placeholder 3",
-                "Placeholder 4",
+                "Concentric Shapes"
             ];
 
             egui::CentralPanel::default().show(&ctx, |ui| {
@@ -109,14 +109,21 @@ fn update(_app: &App, model: &mut Model, _update: Update) {
                     ui.heading("Select Spiral");
                     ui.separator();
                     ui.horizontal_wrapped(|ui| {
-                        for &label in &styles {
-                            let clicked = ui
-                                .add_sized([150.0, 200.0], egui::Button::new(label))
-                                .clicked();
-                            if clicked {
-                                model.state = AppState::SpiralView
+                        for label in &styles {
+                            if ui
+                                .add_sized([150.0, 200.0], egui::Button::new(*label))
+                                .clicked()
+                            {
+                                model.active_visual = match *label {
+                                    "Classic Spiral" => Box::new(ClassicVisual::new(model.w, model.h)),
+                                    "Concentric Shapes" => Box::new(ConcentricVisual::new(model.w, model.h)),
+                                    _ => Box::new(ClassicVisual::new(model.w, model.h)), // fallback
+                                };
+                                model.needs_update = true;
+                                model.state = AppState::SpiralView;
                             }
                         }
+
                     });
                     ui.separator();
                 })

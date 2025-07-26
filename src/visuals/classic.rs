@@ -91,6 +91,7 @@ impl Visual for ClassicVisual {
         self.x.clear();
         self.y.clear();
         
+        
         // outer spiral edge points
         for i in 0..=self.count {
             let cur = i as f32 / self.count as f32;
@@ -124,7 +125,7 @@ impl Visual for ClassicVisual {
     }
     fn ui(&mut self, ui: &mut Ui) {
         self.needs_update |= ui.add(egui::Slider::new( & mut self.turns, 1..=15).text("Turns")).changed();
-        ui.add(egui::Slider::new( & mut self.speed, - 5.0..=5.0).text("Speed"));
+        ui.add(egui::Slider::new( & mut self.speed, - 10.0..=10.0).text("Speed"));
         self.needs_update |= ui.add(egui::Slider::new( & mut self.warp, - 0.5..=0.5).text("Warp")).changed();
         ui.add(egui::Slider::new( & mut self.count, 90..=1080).text("Resolution"));
         ui.label("Color 1");

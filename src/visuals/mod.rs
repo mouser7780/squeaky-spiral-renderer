@@ -19,3 +19,5 @@ pub fn u83_to_rgb(color: [u8;3]) -> Rgb {
 
 pub mod classic;
 pub use classic::ClassicVisual;
+pub mod concentric;
+pub use concentric::ConcentricVisual;
