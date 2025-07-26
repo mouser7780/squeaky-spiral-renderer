@@ -12,6 +12,7 @@ struct Model {
     // window components
     _window: window::Id,
     egui: Egui,
+    show_gui: bool,
     w:u32,
     h:u32,
     last_frame_time: Instant,
@@ -64,6 +65,7 @@ fn model(app: &App) -> Model {
         fps: 0.0,
         needs_update:true,
         active_visual: Box::new(ClassicVisual::new(w,h)),
+        show_gui: true,
     }
 }
 
@@ -78,6 +80,15 @@ fn raw_window_event(_app: &App, model: &mut Model, event: &nannou::winit::event:
         model.active_visual.resize(model.w,model.h);
         model.needs_update = true;
     }
+    
+    //listen for f1 key for gui toggle
+    if let nannou::winit::event::WindowEvent::KeyboardInput {input, ..} = event 
+        && input.state == nannou::winit::event::ElementState::Pressed
+        && input.virtual_keycode == Some(nannou::winit::event::VirtualKeyCode::F1)
+    {
+        model.show_gui=!model.show_gui;
+    }
+
 }
 
 fn update(_app: &App, model: &mut Model, _update: Update) {
@@ -135,10 +146,11 @@ fn update(_app: &App, model: &mut Model, _update: Update) {
             }
             
             active_visual.update(delta_time);
-            
-            egui::Window::new("Spiral Controls").show(&ctx, |ui| {
-                active_visual.ui(ui);
-            });
+            if model.show_gui {
+                egui::Window::new("Spiral Controls").show(&ctx, |ui| {
+                    active_visual.ui(ui);
+                });
+            }
             
         }
     }

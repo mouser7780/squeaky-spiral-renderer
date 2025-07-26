@@ -125,7 +125,6 @@ impl Visual for ClassicVisual {
     fn ui(&mut self, ui: &mut Ui) {
         self.needs_update |= ui.add(egui::Slider::new( & mut self.turns, 1..=15).text("Turns")).changed();
         ui.add(egui::Slider::new( & mut self.speed, - 5.0..=5.0).text("Speed"));
-        ui.add(egui::Slider::new( & mut self.offset, 0.0..=1.0).text("Offset"));
         self.needs_update |= ui.add(egui::Slider::new( & mut self.warp, - 0.5..=0.5).text("Warp")).changed();
         ui.add(egui::Slider::new( & mut self.count, 90..=1080).text("Resolution"));
         ui.label("Color 1");
