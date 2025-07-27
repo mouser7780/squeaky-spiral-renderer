@@ -8,6 +8,14 @@ struct Ring {
     inner: Vec<Point2>,
     outer: Vec<Point2>,
 }
+
+#[derive(Debug, PartialEq)]
+enum WidthFunction {
+    Constant,
+    //Exponential,
+    //Logarithm,
+    //Sine,
+}
 pub struct ConcentricVisual {
     count: i32,
     rad_max: f32,
@@ -17,6 +25,7 @@ pub struct ConcentricVisual {
     speed: f32,
     scale: f32,
     rings: Vec<Ring>,
+    width_fn: WidthFunction,
     w: u32,
     h: u32,
     color1: [u8; 3],
@@ -36,6 +45,7 @@ impl ConcentricVisual {
             speed:0.2,
             scale:0.0,
             rings:Vec::new(),
+            width_fn: WidthFunction::Constant,
             w,
             h,
             color1: [0,0,0],
@@ -43,12 +53,12 @@ impl ConcentricVisual {
             needs_update:true,
         }
     }
-    
+
     fn recalculate_geometry(&mut self) {
         self.rings.clear();
 
         let range = self.rad_max - self.rad_min;
-        let spacing = range / (self.turns as f32 + 1.5);
+        let spacing = range / (self.turns as f32 + 2.0);
 
         let angle_step = 2.0 * PI / self.count as f32;
         let angles: Vec<(f32, f32)> = (0..self.count)
@@ -58,7 +68,7 @@ impl ConcentricVisual {
             })
             .collect();
 
-        for i in 1..self.turns+3 {
+        for i in 1..self.turns + 3 {
             let base_radius = self.rad_min + spacing * i as f32;
             let mut inner = Vec::with_capacity(self.count as usize);
             let mut outer = Vec::with_capacity(self.count as usize);
@@ -76,6 +86,15 @@ impl ConcentricVisual {
 
         self.rad_max=(((self.w as f32/ 2.0).pow(2.0) + (self.h as f32 /2.0).pow(2.0)).sqrt())/1000.0;
     }
+
+    fn width_multiplier(&self, _radius: f32) -> f32 {
+        match self.width_fn{
+            WidthFunction::Constant => 1.0,
+            //WidthFunction::Exponential => radius.exp(),
+            //WidthFunction::Logarithm => radius.ln(),
+            //WidthFunction::Sine => 0.5 + 0.5 * (radius * 20.0).sin(),
+        }
+    }
 }
 
 impl Visual for ConcentricVisual {
@@ -90,11 +109,11 @@ impl Visual for ConcentricVisual {
     fn resize(&mut self, w: u32, h: u32) {
         self.w = w;
         self.h = h;
-        
+
         self.recalculate_geometry();
         self.needs_update = true;
     }
-    
+
     fn update(&mut self, delta_time: f32) {
         self.scale += self.speed * delta_time;
 
@@ -108,38 +127,77 @@ impl Visual for ConcentricVisual {
         let colour1rgb = u83_to_rgb(self.color1);
         let colour2rgb = u83_to_rgb(self.color2);
         draw.background().color(colour1rgb);
-        
-        let spacing = (self.rad_max - self.rad_min)/(self.turns as f32 + 1.5);
-        
+
+        let spacing = (self.rad_max - self.rad_min)/(self.turns as f32 + 2.0);
+
         for ring in &self.rings {
-            let half_width = self.width * spacing / 2.0;
+            let raw_center = ring.base_radius + self.scale;
+
+            let width_factor = self.width_multiplier(raw_center);
+            let half_width = self.width * width_factor * spacing / 2.0;
+
+            let raw_inner = raw_center - half_width;
+            let raw_outer = raw_center + half_width;
+
+            let inner_rad = wrap_range(raw_inner, self.rad_min, self.rad_max);
+            let outer_rad = wrap_range(raw_outer, self.rad_min, self.rad_max);
             
-            let center_radius = wrap_range(
-                ring.base_radius + self.scale,
-                self.rad_min - half_width,
-                self.rad_max + half_width,
-            );
-            
-            let inner_rad = (center_radius - half_width).max(self.rad_min);
-            let outer_rad = (center_radius + half_width).min(self.rad_max);
-            
-            let scaled_outer = ring.outer.iter().map(|p| *p * outer_rad * 1000.0);
-            let scaled_inner = ring.inner.iter().rev().map(|p| *p * inner_rad * 1000.0);
-            
-            let mut ring_points: Vec<Point2> = scaled_outer.collect();
-            if let Some(first_outer) = ring_points.first() {
-                ring_points.push(*first_outer);
+            let crosses_boundary = inner_rad > outer_rad;
+
+            if crosses_boundary {
+                let inner_a = ring.inner.iter().rev().map(|p| *p * self.rad_min * 1000.0);
+                let outer_a = ring.outer.iter().map(|p| *p * outer_rad * 1000.0);
+
+                let mut points_a: Vec<Point2> = outer_a.collect();
+                if let Some(first_outer) = points_a.first() {
+                    points_a.push(*first_outer);
+                }
+                let mut inner_rev_a: Vec<Point2> = inner_a.collect();
+                if let Some(first_inner) = inner_rev_a.first() {
+                    inner_rev_a.push(*first_inner);
+                }
+                points_a.extend(inner_rev_a);
+
+                draw.polygon()
+                    .color(colour2rgb)
+                    .points(points_a);
+                
+                let inner_b = ring.inner.iter().rev().map(|p| *p * inner_rad * 1000.0);
+                let outer_b = ring.outer.iter().map(|p| *p * self.rad_max * 1000.0);
+
+                let mut points_b: Vec<Point2> = outer_b.collect();
+                if let Some(first_outer) = points_b.first() {
+                    points_b.push(*first_outer);
+                }
+                let mut inner_rev_b: Vec<Point2> = inner_b.collect();
+                if let Some(first_inner) = inner_rev_b.first() {
+                    inner_rev_b.push(*first_inner);
+                }
+                points_b.extend(inner_rev_b);
+
+                draw.polygon()
+                    .color(colour2rgb)
+                    .points(points_b);
+
+            } else {
+                let scaled_outer = ring.outer.iter().map(|p| *p * outer_rad * 1000.0);
+                let scaled_inner = ring.inner.iter().rev().map(|p| *p * inner_rad * 1000.0);
+
+                let mut ring_points: Vec<Point2> = scaled_outer.collect();
+                if let Some(first_outer) = ring_points.first() {
+                    ring_points.push(*first_outer);
+                }
+                let mut inner_rev: Vec<Point2> = scaled_inner.collect();
+                if let Some(first_inner) = inner_rev.first() {
+                    inner_rev.push(*first_inner);
+                }
+
+                ring_points.extend(inner_rev);
+
+                draw.polygon()
+                    .color(colour2rgb)
+                    .points(ring_points);
             }
-            let mut inner_rev: Vec<Point2> = scaled_inner.collect();
-            if let Some(first_inner) = inner_rev.first() {
-                inner_rev.push(*first_inner);
-            }
-            
-            ring_points.extend(inner_rev);
-            
-            draw.polygon()
-                .color(colour2rgb)
-                .points(ring_points);
         }
     }
 
@@ -148,6 +206,12 @@ impl Visual for ConcentricVisual {
         self.needs_update |= ui.add(egui::Slider::new(&mut self.turns, 1..=50).text("Turns")).changed();
         self.needs_update |= ui.add(egui::Slider::new(&mut self.width, 0.01..=1.00).text("Width")).changed();
         self.needs_update |= ui.add(egui::Slider::new(&mut self.speed , -1.00..=1.00).text("Speed")).changed();
+        //ui.label("Width Function");
+        //self.needs_update |= ui.selectable_value(&mut self.width_fn, WidthFunction::Constant, "Constant").changed();
+        //self.needs_update |= ui.selectable_value(&mut self.width_fn, WidthFunction::Exponential, "Exponential").changed();
+        //self.needs_update |= ui.selectable_value(&mut self.width_fn, WidthFunction::Logarithm, "Logarithm").changed();
+        //self.needs_update |= ui.selectable_value(&mut self.width_fn, WidthFunction::Sine, "Sine").changed();
+
         ui.label("Color 1");
         ui.color_edit_button_srgb( & mut self.color1);
         ui.label("Color 2");
