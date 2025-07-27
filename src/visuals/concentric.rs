@@ -3,6 +3,11 @@ use nannou_egui::egui;
 use nannou_egui::egui::Ui;
 use crate::visuals::{Visual, u83_to_rgb};
 
+struct Ring {
+    base_radius: f32,
+    inner: Vec<Point2>,
+    outer: Vec<Point2>,
+}
 pub struct ConcentricVisual {
     count: i32,
     rad_max: f32,
@@ -11,11 +16,11 @@ pub struct ConcentricVisual {
     turns: i32,
     speed: f32,
     scale: f32,
+    rings: Vec<Ring>,
     w: u32,
     h: u32,
     color1: [u8; 3],
     color2: [u8; 3],
-    circles: Vec<Vec<Point2>>,
     needs_update: bool,
 }
 
@@ -23,7 +28,6 @@ impl ConcentricVisual {
     pub fn new(w: u32, h: u32) -> Self {
         let rad_max=(((w as f32/ 2.0).pow(2.0) + (h as f32 /2.0).pow(2.0)).sqrt())/1000.0;
         Self{
-            circles: Vec::new(),
             count:720,
             rad_max,
             rad_min:0.0001,
@@ -31,6 +35,7 @@ impl ConcentricVisual {
             turns:3,
             speed:0.2,
             scale:0.0,
+            rings:Vec::new(),
             w,
             h,
             color1: [0,0,0],
@@ -40,6 +45,35 @@ impl ConcentricVisual {
     }
     
     fn recalculate_geometry(&mut self) {
+        self.rings.clear();
+
+        let range = self.rad_max - self.rad_min;
+        let spacing = range / (self.turns as f32 + 1.5);
+
+        let angle_step = 2.0 * PI / self.count as f32;
+        let angles: Vec<(f32, f32)> = (0..self.count)
+            .map(|j| {
+                let a = j as f32 * angle_step;
+                (a.cos(),a.sin())
+            })
+            .collect();
+
+        for i in 1..self.turns+3 {
+            let base_radius = self.rad_min + spacing * i as f32;
+            let mut inner = Vec::with_capacity(self.count as usize);
+            let mut outer = Vec::with_capacity(self.count as usize);
+
+            for &(cos, sin) in &angles {
+                inner.push(pt2(cos, sin));
+                outer.push(pt2(cos, sin));
+            }
+            self.rings.push(Ring{
+                base_radius,
+                inner,
+                outer,
+            });
+        }
+
         self.rad_max=(((self.w as f32/ 2.0).pow(2.0) + (self.h as f32 /2.0).pow(2.0)).sqrt())/1000.0;
     }
 }
@@ -56,7 +90,7 @@ impl Visual for ConcentricVisual {
     fn resize(&mut self, w: u32, h: u32) {
         self.w = w;
         self.h = h;
-
+        
         self.recalculate_geometry();
         self.needs_update = true;
     }
@@ -64,50 +98,48 @@ impl Visual for ConcentricVisual {
     fn update(&mut self, delta_time: f32) {
         self.scale += self.speed * delta_time;
 
-        self.circles.clear();
-
         if self.needs_update {
             self.recalculate_geometry();
             self.needs_update = false;
         }
-
-        for i in 1..self.turns+3 {
-            let range = self.rad_max - self.rad_min;
-            let spacing = range / (self.turns as f32 + 1.5);
-
-            let base = self.rad_min + spacing * i as f32;
-            let half_width = (self.width * spacing) / 2.0;
-            let radius_center = wrap_range(base + self.scale, self.rad_min-half_width, self.rad_max+half_width);
-            
-            let inner_rad = (radius_center - half_width).max(self.rad_min);
-            let outer_rad = (radius_center + half_width).min(self.rad_max);
-
-            let mut inner_ring = Vec::new();
-            let mut outer_ring = Vec::new();
-
-            for j in 0..self.count {
-                let angle = 2.0 * PI * j as f32 / self.count as f32;
-                inner_ring.push(pt2(inner_rad * angle.cos() * 1000.0, inner_rad * angle.sin() * 1000.0));
-                outer_ring.push(pt2(outer_rad * angle.cos() * 1000.0, outer_rad * angle.sin() * 1000.0));
-            }
-            inner_ring.push(pt2(inner_rad * 1000.0, 0.0));
-            outer_ring.push(pt2(outer_rad * 1000.0, 0.0));
-
-            let mut ring_points = outer_ring.clone();
-            ring_points.extend(inner_ring.into_iter());
-            self.circles.push(ring_points);
-        }
     }
-
 
     fn draw(&self, draw: &Draw) {
         let colour1rgb = u83_to_rgb(self.color1);
         let colour2rgb = u83_to_rgb(self.color2);
         draw.background().color(colour1rgb);
-        for ring in &self.circles {
+        
+        let spacing = (self.rad_max - self.rad_min)/(self.turns as f32 + 1.5);
+        
+        for ring in &self.rings {
+            let half_width = self.width * spacing / 2.0;
+            
+            let center_radius = wrap_range(
+                ring.base_radius + self.scale,
+                self.rad_min - half_width,
+                self.rad_max + half_width,
+            );
+            
+            let inner_rad = (center_radius - half_width).max(self.rad_min);
+            let outer_rad = (center_radius + half_width).min(self.rad_max);
+            
+            let scaled_outer = ring.outer.iter().map(|p| *p * outer_rad * 1000.0);
+            let scaled_inner = ring.inner.iter().rev().map(|p| *p * inner_rad * 1000.0);
+            
+            let mut ring_points: Vec<Point2> = scaled_outer.collect();
+            if let Some(first_outer) = ring_points.first() {
+                ring_points.push(*first_outer);
+            }
+            let mut inner_rev: Vec<Point2> = scaled_inner.collect();
+            if let Some(first_inner) = inner_rev.first() {
+                inner_rev.push(*first_inner);
+            }
+            
+            ring_points.extend(inner_rev);
+            
             draw.polygon()
                 .color(colour2rgb)
-                .points(ring.clone());
+                .points(ring_points);
         }
     }
 
